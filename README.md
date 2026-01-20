@@ -2,8 +2,8 @@
 
 A powerful client-side AI image generation tool using OpenRouter API. Generate thumbnails, artwork, and creative images with multiple state-of-the-art models.
 
-![Imagen UI](UI.webp)
-![Imagen UI-1](UI-1.webp)
+![Imagen UI](assets/UI.webp)
+![Imagen UI-1](assets/UI-1.webp)
 
 ## ✨ Features
 
@@ -91,10 +91,10 @@ This is a **100% client-side application**:
 
 ```
 imagen/
-├── index.html      # Main UI structure
-├── styles.css      # Premium dark theme styling
-├── app.js          # Core logic + API integration
-└── README.md       # This file
+├── src/            # Source code (JS/CSS)
+├── assets/         # Images and design assets
+├── index.html      # Main entry point
+└── README.md       # Documentation
 ```
 
 ## 📜 License
