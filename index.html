@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Imagen</title>
+    <link rel="stylesheet" href="styles.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+</head>
+
+<body>
+    <div class="app-container">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <h1 class="logo">🎨 Imagen</h1>
+            </div>
+
+            <!-- Reference Images Section -->
+            <div class="reference-section">
+                <h3>Reference Images</h3>
+                <div class="reference-slots" id="referenceSlots">
+                    <!-- Slots rendered dynamically by JS -->
+                </div>
+                <button class="btn btn-ghost" id="clearReferences">Clear All References</button>
+            </div>
+
+            <!-- Model Selection -->
+            <div class="config-section">
+                <h3>Model</h3>
+                <div class="custom-select" id="modelSelectContainer">
+                    <div class="custom-select-trigger" id="modelSelectTrigger">
+                        <span id="modelSelectValue">Gemini 2.5 Flash Image</span>
+                        <span class="custom-select-arrow">▾</span>
+                    </div>
+                    <div class="custom-select-options" id="modelSelectOptions">
+                        <div class="custom-select-option selected" data-value="google/gemini-2.5-flash-image">Gemini 2.5
+                            Flash Image</div>
+                        <div class="custom-select-option" data-value="google/gemini-2.5-flash-image-preview">Gemini 2.5
+                            Flash (Preview)</div>
+                        <div class="custom-select-option" data-value="google/gemini-3-pro-image-preview">Gemini 3 Pro
+                            (Preview)</div>
+                        <div class="custom-select-option" data-value="openai/gpt-5-image">GPT-5 Image</div>
+                        <div class="custom-select-option" data-value="openai/gpt-5-image-mini">GPT-5 Image Mini</div>
+                        <div class="custom-select-option" data-value="black-forest-labs/flux.2-pro">Flux 2 Pro</div>
+                        <div class="custom-select-option" data-value="black-forest-labs/flux.2-max">Flux 2 Max</div>
+                        <div class="custom-select-option" data-value="black-forest-labs/flux.2-flex">Flux 2 Flex</div>
+                        <div class="custom-select-option" data-value="black-forest-labs/flux.2-klein-4b">Flux 2 Klein 4B
+                        </div>
+                        <div class="custom-select-option" data-value="bytedance-seed/seedream-4.5">Seedream 4.5</div>
+                        <div class="custom-select-option" data-value="sourceful/riverflow-v2-fast-preview">Riverflow V2
+                            Fast</div>
+                        <div class="custom-select-option" data-value="sourceful/riverflow-v2-standard-preview">Riverflow
+                            V2 Standard</div>
+                        <div class="custom-select-option" data-value="sourceful/riverflow-v2-max-preview">Riverflow V2
+                            Max</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Image Quality (Gemini specific) -->
+            <div class="config-section" id="geminiOptions">
+                <h3>Image Size</h3>
+                <div class="button-group">
+                    <button class="btn-toggle active" data-size="1024x1024" data-quality="1K">1K</button>
+                    <button class="btn-toggle" data-size="2048x2048" data-quality="2K">2K</button>
+                    <button class="btn-toggle" data-size="4096x4096" data-quality="4K">4K</button>
+                </div>
+            </div>
+
+            <!-- Aspect Ratio -->
+            <div class="config-section">
+                <h3>Aspect Ratio</h3>
+                <div class="aspect-grid">
+                    <button class="btn-aspect active" data-ratio="1:1">1:1</button>
+                    <button class="btn-aspect" data-ratio="16:9">16:9</button>
+                    <button class="btn-aspect" data-ratio="9:16">9:16</button>
+                    <button class="btn-aspect" data-ratio="4:3">4:3</button>
+                    <button class="btn-aspect" data-ratio="3:4">3:4</button>
+                    <button class="btn-aspect" data-ratio="3:2">3:2</button>
+                </div>
+            </div>
+
+            <!-- Number of Images -->
+            <div class="config-section">
+                <h3>Number of Images</h3>
+                <div class="number-input-group">
+                    <button type="button" class="btn-number" id="decreaseCount">−</button>
+                    <input type="number" id="imageCount" value="1" min="1" max="8" class="number-input">
+                    <button type="button" class="btn-number" id="increaseCount">+</button>
+                </div>
+            </div>
+
+            <!-- API Key -->
+            <div class="config-section">
+                <h3>OpenRouter API Key</h3>
+                <input type="password" id="apiKey" placeholder="sk-or-..." class="text-input">
+                <button class="btn btn-ghost" id="saveApiKey">Save Key</button>
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Prompt Area -->
+            <div class="prompt-area">
+                <div class="prompt-container">
+                    <textarea id="promptInput" placeholder="Describe the image you want to generate..."
+                        rows="3"></textarea>
+                    <div class="prompt-actions">
+                        <span class="char-count" id="charCount">0 chars</span>
+                        <button class="btn btn-primary" id="generateBtn">
+                            Generate
+                        </button>
+                    </div>
+                </div>
+                <!-- Loading Indicator -->
+                <div class="loading-container" id="loadingContainer" style="display: none;">
+                    <div class="loading-spinner"></div>
+                    <span class="loading-text">Generating images...</span>
+                </div>
+            </div>
+
+            <!-- Gallery -->
+            <div class="gallery-header">
+                <h2>Generated Images</h2>
+                <div class="gallery-actions">
+                    <button class="btn btn-ghost" id="clearGallery">Clear Gallery</button>
+                </div>
+            </div>
+            <div class="gallery" id="gallery">
+                <div class="gallery-empty" id="galleryEmpty">
+                    <span class="empty-icon">🖼️</span>
+                    <p>No images generated yet</p>
+                    <p class="empty-hint">Write a prompt above and click Generate</p>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Image Modal -->
+    <div class="modal" id="imageModal">
+        <div class="modal-overlay" id="modalOverlay"></div>
+        <div class="modal-content">
+            <button class="modal-close" id="modalClose">×</button>
+            <img src="" alt="Full size image" id="modalImage">
+            <div class="modal-actions">
+                <button class="btn btn-secondary" id="useAsReference">
+                    <span>📌</span> Use as Reference
+                </button>
+                <button class="btn btn-secondary" id="recreateImage">
+                    <span>🔄</span> Recreate
+                </button>
+                <button class="btn btn-secondary" id="downloadImage">
+                    <span>⬇️</span> Download
+                </button>
+            </div>
+            <div class="modal-metadata" id="modalMetadata">
+                <!-- Metadata will be injected here -->
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+
+</html>
