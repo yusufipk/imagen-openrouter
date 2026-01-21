@@ -549,7 +549,6 @@ async function generateImages() {
 
     const modelConfig = MODEL_CONFIGS[state.selectedModel];
     const currentReferences = state.references.length > 0 ? [...state.references] : [];
-    console.log('Generating with references:', currentReferences.length, currentReferences);
     let successCount = 0;
     let failCount = 0;
 
@@ -857,13 +856,10 @@ function recreateImage() {
     });
 
     // Restore references (always update the UI, even if empty to clear previous refs)
-    console.log('Recreate - image references:', state.currentImage.references);
     if (state.currentImage.references && state.currentImage.references.length > 0) {
         state.references = [...state.currentImage.references];
-        console.log('Restored references:', state.references.length);
     } else {
         state.references = [];
-        console.log('No references to restore');
     }
     renderReferenceSlots();
 
