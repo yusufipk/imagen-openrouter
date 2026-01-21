@@ -90,9 +90,9 @@ const ImagenDB = {
 const state = {
     apiKey: localStorage.getItem('imagen_api_key') || '',
     selectedModel: localStorage.getItem('imagen_model') || 'google/gemini-2.5-flash-image',
-    imageSize: '1024x1024',
-    imageQuality: '1K',
-    aspectRatio: '1:1',
+    imageSize: localStorage.getItem('imagen_size') || '1024x1024',
+    imageQuality: localStorage.getItem('imagen_quality') || '1K',
+    aspectRatio: localStorage.getItem('imagen_aspect_ratio') || '1:1',
     imageCount: 1,
     references: [], // Dynamic array - unlimited references
     images: [], // Will be loaded from IndexedDB
@@ -251,6 +251,22 @@ async function init() {
         }
     }
 
+    // Restore saved image quality/size
+    document.querySelectorAll('.btn-toggle').forEach(btn => {
+        btn.classList.remove('active');
+        if (btn.dataset.quality === state.imageQuality) {
+            btn.classList.add('active');
+        }
+    });
+
+    // Restore saved aspect ratio
+    document.querySelectorAll('.btn-aspect').forEach(btn => {
+        btn.classList.remove('active');
+        if (btn.dataset.ratio === state.aspectRatio) {
+            btn.classList.add('active');
+        }
+    });
+
     // Load images from IndexedDB
     try {
         state.images = await ImagenDB.getAllImages();
@@ -303,6 +319,8 @@ function setupEventListeners() {
             btn.classList.add('active');
             state.imageSize = btn.dataset.size;
             state.imageQuality = btn.dataset.quality;
+            localStorage.setItem('imagen_size', state.imageSize);
+            localStorage.setItem('imagen_quality', state.imageQuality);
         });
     });
 
@@ -312,6 +330,7 @@ function setupEventListeners() {
             document.querySelectorAll('.btn-aspect').forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
             state.aspectRatio = btn.dataset.ratio;
+            localStorage.setItem('imagen_aspect_ratio', state.aspectRatio);
         });
     });
 
@@ -528,60 +547,59 @@ async function generateImages() {
     elements.generateBtn.disabled = true;
     elements.loadingContainer.style.display = 'flex';
 
-    try {
-        const modelConfig = MODEL_CONFIGS[state.selectedModel];
-        const promises = [];
+    const modelConfig = MODEL_CONFIGS[state.selectedModel];
+    const currentReferences = state.references.length > 0 ? [...state.references] : [];
+    console.log('Generating with references:', currentReferences.length, currentReferences);
+    let successCount = 0;
+    let failCount = 0;
 
-        for (let i = 0; i < state.imageCount; i++) {
-            promises.push(generateSingleImage(prompt, modelConfig));
-        }
-
-        const results = await Promise.allSettled(promises);
-
-        let successCount = 0;
-        const newImages = [];
-
-        results.forEach((result, index) => {
-            if (result.status === 'fulfilled' && result.value) {
+    // Generate images and display each one as it completes
+    const generateAndDisplay = async (index) => {
+        try {
+            const result = await generateSingleImage(prompt, modelConfig);
+            if (result) {
                 const imageData = {
                     id: Date.now() + index,
-                    url: result.value,
+                    url: result,
                     prompt: prompt,
                     model: state.selectedModel,
                     modelName: modelConfig.name,
                     size: state.imageSize,
                     quality: state.imageQuality,
                     aspectRatio: state.aspectRatio,
-                    references: state.references.length > 0 ? [...state.references] : [],
+                    references: currentReferences,
                     createdAt: new Date().toISOString()
                 };
-                newImages.push(imageData);
                 state.images.unshift(imageData);
+                renderGallery();
                 successCount++;
-            } else {
-                console.error('Failed to generate image:', result.reason);
+                
+                // Save to IndexedDB in background
+                ImagenDB.saveImage(imageData).catch(e => console.error('Failed to save to IndexedDB:', e));
             }
-        });
-
-        if (successCount > 0) {
-            // Render gallery immediately so user sees results
-            renderGallery();
-            showToast(`${successCount} image(s) generated!`, 'success');
-            
-            // Save to IndexedDB in background (don't block UI)
-            Promise.all(newImages.map(img => ImagenDB.saveImage(img)))
-                .catch(dbError => console.error('Failed to save to IndexedDB:', dbError));
-        } else {
-            showToast('Failed to generate images. Check console for details.', 'error');
+        } catch (error) {
+            console.error('Failed to generate image:', error);
+            failCount++;
         }
+    };
 
-    } catch (error) {
-        console.error('Generation error:', error);
-        showToast(`Error: ${error.message}`, 'error');
-    } finally {
-        state.isGenerating = false;
-        elements.generateBtn.disabled = false;
-        elements.loadingContainer.style.display = 'none';
+    // Start all generations in parallel, each will render when done
+    const promises = [];
+    for (let i = 0; i < state.imageCount; i++) {
+        promises.push(generateAndDisplay(i));
+    }
+
+    // Wait for all to complete to update final UI state
+    await Promise.allSettled(promises);
+
+    state.isGenerating = false;
+    elements.generateBtn.disabled = false;
+    elements.loadingContainer.style.display = 'none';
+
+    if (successCount > 0) {
+        showToast(`${successCount} image(s) generated!`, 'success');
+    } else {
+        showToast('Failed to generate images. Check console for details.', 'error');
     }
 }
 
@@ -838,11 +856,16 @@ function recreateImage() {
         }
     });
 
-    // Restore references
+    // Restore references (always update the UI, even if empty to clear previous refs)
+    console.log('Recreate - image references:', state.currentImage.references);
     if (state.currentImage.references && state.currentImage.references.length > 0) {
         state.references = [...state.currentImage.references];
-        renderReferenceSlots();
+        console.log('Restored references:', state.references.length);
+    } else {
+        state.references = [];
+        console.log('No references to restore');
     }
+    renderReferenceSlots();
 
     closeModal();
     showToast('Settings restored. Click Generate to recreate.', 'success');
