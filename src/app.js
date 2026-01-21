@@ -552,6 +552,7 @@ async function generateImages() {
                     size: state.imageSize,
                     quality: state.imageQuality,
                     aspectRatio: state.aspectRatio,
+                    references: state.references.length > 0 ? [...state.references] : [],
                     createdAt: new Date().toISOString()
                 };
                 newImages.push(imageData);
@@ -563,16 +564,13 @@ async function generateImages() {
         });
 
         if (successCount > 0) {
-            // Save to IndexedDB (no size limit!)
-            try {
-                for (const img of newImages) {
-                    await ImagenDB.saveImage(img);
-                }
-            } catch (dbError) {
-                console.error('Failed to save to IndexedDB:', dbError);
-            }
+            // Render gallery immediately so user sees results
             renderGallery();
             showToast(`${successCount} image(s) generated!`, 'success');
+            
+            // Save to IndexedDB in background (don't block UI)
+            Promise.all(newImages.map(img => ImagenDB.saveImage(img)))
+                .catch(dbError => console.error('Failed to save to IndexedDB:', dbError));
         } else {
             showToast('Failed to generate images. Check console for details.', 'error');
         }
@@ -810,9 +808,15 @@ function recreateImage() {
     elements.promptInput.value = state.currentImage.prompt;
     elements.charCount.textContent = `${state.currentImage.prompt.length} chars`;
 
-    // Restore model
-    elements.modelSelect.value = state.currentImage.model;
+    // Restore model using custom select
     state.selectedModel = state.currentImage.model;
+    localStorage.setItem('imagen_model', state.selectedModel);
+    const modelOption = document.querySelector(`.custom-select-option[data-value="${state.currentImage.model}"]`);
+    if (modelOption) {
+        document.querySelectorAll('.custom-select-option').forEach(o => o.classList.remove('selected'));
+        modelOption.classList.add('selected');
+        elements.modelSelectValue.textContent = modelOption.textContent;
+    }
     updateGeminiOptionsVisibility();
 
     // Restore quality/size
@@ -835,14 +839,9 @@ function recreateImage() {
     });
 
     // Restore references
-    if (state.currentImage.references) {
-        state.references = [null, null, null];
-        state.currentImage.references.forEach((ref, index) => {
-            if (index < 3) {
-                state.references[index] = ref;
-                updateReferenceSlot(index);
-            }
-        });
+    if (state.currentImage.references && state.currentImage.references.length > 0) {
+        state.references = [...state.currentImage.references];
+        renderReferenceSlots();
     }
 
     closeModal();
