@@ -876,7 +876,7 @@ function renderGallery() {
         const safePrompt = escapeHtml(image.prompt);
 
         card.innerHTML = `
-            <div class="image-card-actions">
+            <div class="image-card-actions image-card-actions-top">
                 <button class="image-card-btn image-card-download" data-index="${index}" title="Download image">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
@@ -890,6 +890,21 @@ function renderGallery() {
                         <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
                         <line x1="10" y1="11" x2="10" y2="17"></line>
                         <line x1="14" y1="11" x2="14" y2="17"></line>
+                    </svg>
+                </button>
+            </div>
+            <div class="image-card-actions image-card-actions-bottom">
+                <button class="image-card-btn image-card-reference" data-index="${index}" title="Use as reference">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
+                        <circle cx="12" cy="10" r="3"></circle>
+                    </svg>
+                </button>
+                <button class="image-card-btn image-card-recreate" data-index="${index}" title="Recreate with same settings">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="23 4 23 10 17 10"></polyline>
+                        <polyline points="1 20 1 14 7 14"></polyline>
+                        <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
                     </svg>
                 </button>
             </div>
@@ -916,6 +931,20 @@ function renderGallery() {
         deleteBtn.addEventListener('click', (e) => {
             e.stopPropagation();
             deleteImage(index);
+        });
+
+        // Reference button handler
+        const referenceBtn = card.querySelector('.image-card-reference');
+        referenceBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            addImageAsReference(index);
+        });
+
+        // Recreate button handler
+        const recreateBtn = card.querySelector('.image-card-recreate');
+        recreateBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            recreateImageByIndex(index);
         });
 
         // Open modal on card click
@@ -950,6 +979,64 @@ function downloadImageByIndex(index) {
     link.click();
     document.body.removeChild(link);
     showToast('Image downloaded', 'success');
+}
+
+function addImageAsReference(index) {
+    const image = state.images[index];
+    if (!image) return;
+
+    state.references.push(image.url);
+    renderReferenceSlots();
+    showToast('Image added as reference', 'success');
+}
+
+function recreateImageByIndex(index) {
+    const image = state.images[index];
+    if (!image) return;
+
+    // Restore prompt
+    elements.promptInput.value = image.prompt;
+    elements.charCount.textContent = `${image.prompt.length} chars`;
+
+    // Restore model using custom select
+    state.selectedModel = image.model;
+    localStorage.setItem('imagen_model', state.selectedModel);
+    const modelOption = document.querySelector(`.custom-select-option[data-value="${image.model}"]`);
+    if (modelOption) {
+        document.querySelectorAll('.custom-select-option').forEach(o => o.classList.remove('selected'));
+        modelOption.classList.add('selected');
+        elements.modelSelectValue.textContent = modelOption.textContent;
+    }
+    updateGeminiOptionsVisibility();
+
+    // Restore quality/size
+    document.querySelectorAll('.btn-toggle').forEach(btn => {
+        btn.classList.remove('active');
+        if (btn.dataset.quality === image.quality) {
+            btn.classList.add('active');
+        }
+    });
+
+    // Restore aspect ratio
+    document.querySelectorAll('.btn-aspect').forEach(btn => {
+        btn.classList.remove('active');
+        if (btn.dataset.ratio === image.aspectRatio) {
+            btn.classList.add('active');
+        }
+    });
+
+    // Restore references
+    if (image.references && image.references.length > 0) {
+        state.references = [...image.references];
+    } else {
+        state.references = [];
+    }
+    renderReferenceSlots();
+
+    showToast('Settings restored. Click Generate to recreate.', 'success');
+
+    // Scroll to top
+    window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
 // ===== Modal =====
