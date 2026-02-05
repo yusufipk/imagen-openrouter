@@ -93,11 +93,11 @@ const state = {
     imageSize: localStorage.getItem('imagen_size') || '1024x1024',
     imageQuality: localStorage.getItem('imagen_quality') || '1K',
     aspectRatio: localStorage.getItem('imagen_aspect_ratio') || '1:1',
-    imageCount: 1,
+    imageCount: parseInt(localStorage.getItem('imagen_count')) || 1,
     references: [], // Dynamic array - unlimited references
     images: [], // Will be loaded from IndexedDB
     currentImage: null,
-    isGenerating: false
+    pendingBatches: [] // Track pending generation batches { id, prompt, count, completed, failed }
 };
 
 // ===== Model Configurations =====
@@ -215,7 +215,6 @@ const elements = {
     promptInput: document.getElementById('promptInput'),
     charCount: document.getElementById('charCount'),
     generateBtn: document.getElementById('generateBtn'),
-    loadingContainer: document.getElementById('loadingContainer'),
     gallery: document.getElementById('gallery'),
     galleryEmpty: document.getElementById('galleryEmpty'),
     clearGallery: document.getElementById('clearGallery'),
@@ -266,6 +265,11 @@ async function init() {
             btn.classList.add('active');
         }
     });
+
+    // Restore saved image count
+    if (elements.imageCount) {
+        elements.imageCount.value = state.imageCount;
+    }
 
     // Load images from IndexedDB
     try {
@@ -340,6 +344,7 @@ function setupEventListeners() {
             if (state.imageCount > 1) {
                 state.imageCount--;
                 elements.imageCount.value = state.imageCount;
+                localStorage.setItem('imagen_count', state.imageCount);
             }
         });
     }
@@ -349,6 +354,7 @@ function setupEventListeners() {
             if (state.imageCount < 8) {
                 state.imageCount++;
                 elements.imageCount.value = state.imageCount;
+                localStorage.setItem('imagen_count', state.imageCount);
             }
         });
     }
@@ -360,6 +366,7 @@ function setupEventListeners() {
             if (val > 8) val = 8;
             state.imageCount = val;
             elements.imageCount.value = val;
+            localStorage.setItem('imagen_count', state.imageCount);
         });
     }
 
@@ -410,6 +417,57 @@ function setupEventListeners() {
         if (e.key === 'Escape') closeModal();
         if (e.key === 'Enter' && e.ctrlKey) generateImages();
     });
+
+    // Paste images from clipboard
+    document.addEventListener('paste', handlePaste);
+
+    // Warn user before leaving if there are pending generations
+    window.addEventListener('beforeunload', (e) => {
+        if (state.pendingBatches.length > 0) {
+            const pendingCount = state.pendingBatches.reduce((sum, batch) => {
+                return sum + (batch.count - batch.completed - batch.failed);
+            }, 0);
+            if (pendingCount > 0) {
+                e.preventDefault();
+                // Modern browsers ignore custom messages, but we need to return something
+                e.returnValue = `You have ${pendingCount} image(s) still generating. If you leave, they will be lost.`;
+                return e.returnValue;
+            }
+        }
+    });
+}
+
+// ===== Paste Handler =====
+function handlePaste(e) {
+    // Don't intercept paste if user is typing in an input field (except prompt)
+    const activeEl = document.activeElement;
+    if (activeEl && activeEl.tagName === 'INPUT' && activeEl.type !== 'text') {
+        return;
+    }
+
+    const items = e.clipboardData?.items;
+    if (!items) return;
+
+    let imageCount = 0;
+    for (const item of items) {
+        if (item.type.startsWith('image/')) {
+            e.preventDefault();
+            const file = item.getAsFile();
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    state.references.push(event.target.result);
+                    renderReferenceSlots();
+                };
+                reader.readAsDataURL(file);
+                imageCount++;
+            }
+        }
+    }
+
+    if (imageCount > 0) {
+        showToast(`${imageCount} image(s) pasted as reference`, 'success');
+    }
 }
 
 // ===== Drag & Drop =====
@@ -488,7 +546,12 @@ function renderReferenceSlots() {
         slot.dataset.slot = index;
         slot.innerHTML = `
             <img src="${ref}" alt="Reference ${index + 1}">
-            <button class="remove-ref" data-index="${index}">×</button>
+            <button class="remove-ref" data-index="${index}">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="18" y1="6" x2="6" y2="18"></line>
+                    <line x1="6" y1="6" x2="18" y2="18"></line>
+                </svg>
+            </button>
         `;
         container.appendChild(slot);
     });
@@ -543,14 +606,29 @@ async function generateImages() {
         return;
     }
 
-    state.isGenerating = true;
-    elements.generateBtn.disabled = true;
-    elements.loadingContainer.style.display = 'flex';
-
     const modelConfig = MODEL_CONFIGS[state.selectedModel];
     const currentReferences = state.references.length > 0 ? [...state.references] : [];
-    let successCount = 0;
-    let failCount = 0;
+    const currentModel = state.selectedModel;
+    const currentSize = state.imageSize;
+    const currentQuality = state.imageQuality;
+    const currentAspectRatio = state.aspectRatio;
+    const imageCount = state.imageCount;
+    
+    // Create a batch to track this generation request
+    const batchId = Date.now() + Math.random();
+    const batch = {
+        id: batchId,
+        prompt: prompt,
+        model: currentModel,
+        modelName: modelConfig.name,
+        count: imageCount,
+        completed: 0,
+        failed: 0
+    };
+    state.pendingBatches.push(batch);
+    renderGallery(); // Show loading placeholders
+    
+    showToast(`Queued ${imageCount} image(s) for generation`, 'success');
 
     // Generate images and display each one as it completes
     const generateAndDisplay = async (index) => {
@@ -558,45 +636,52 @@ async function generateImages() {
             const result = await generateSingleImage(prompt, modelConfig);
             if (result) {
                 const imageData = {
-                    id: Date.now() + index,
+                    id: Date.now() + index + Math.random(),
                     url: result,
                     prompt: prompt,
-                    model: state.selectedModel,
+                    model: currentModel,
                     modelName: modelConfig.name,
-                    size: state.imageSize,
-                    quality: state.imageQuality,
-                    aspectRatio: state.aspectRatio,
+                    size: currentSize,
+                    quality: currentQuality,
+                    aspectRatio: currentAspectRatio,
                     references: currentReferences,
                     createdAt: new Date().toISOString()
                 };
                 state.images.unshift(imageData);
+                batch.completed++;
                 renderGallery();
-                successCount++;
                 
                 // Save to IndexedDB in background
                 ImagenDB.saveImage(imageData).catch(e => console.error('Failed to save to IndexedDB:', e));
+            } else {
+                batch.failed++;
+                renderGallery();
             }
         } catch (error) {
             console.error('Failed to generate image:', error);
-            failCount++;
+            batch.failed++;
+            renderGallery();
         }
     };
 
     // Start all generations in parallel, each will render when done
     const promises = [];
-    for (let i = 0; i < state.imageCount; i++) {
+    for (let i = 0; i < imageCount; i++) {
         promises.push(generateAndDisplay(i));
     }
 
     // Wait for all to complete to update final UI state
     await Promise.allSettled(promises);
 
-    state.isGenerating = false;
-    elements.generateBtn.disabled = false;
-    elements.loadingContainer.style.display = 'none';
+    // Remove this batch from pending
+    const batchIndex = state.pendingBatches.findIndex(b => b.id === batchId);
+    if (batchIndex !== -1) {
+        state.pendingBatches.splice(batchIndex, 1);
+    }
+    renderGallery();
 
-    if (successCount > 0) {
-        showToast(`${successCount} image(s) generated!`, 'success');
+    if (batch.completed > 0) {
+        showToast(`${batch.completed} image(s) generated!`, 'success');
     } else {
         showToast('Failed to generate images. Check console for details.', 'error');
     }
@@ -732,7 +817,10 @@ async function generateSingleImage(prompt, modelConfig) {
 
 // ===== Gallery =====
 function renderGallery() {
-    if (state.images.length === 0) {
+    const hasPending = state.pendingBatches.length > 0;
+    const hasImages = state.images.length > 0;
+
+    if (!hasImages && !hasPending) {
         elements.galleryEmpty.style.display = 'flex';
         elements.gallery.innerHTML = '';
         elements.gallery.appendChild(elements.galleryEmpty);
@@ -741,6 +829,44 @@ function renderGallery() {
 
     elements.gallery.innerHTML = '';
 
+    // Render loading placeholders for pending batches at the top
+    state.pendingBatches.forEach((batch) => {
+        const pendingCount = batch.count - batch.completed - batch.failed;
+        for (let i = 0; i < pendingCount; i++) {
+            const placeholder = document.createElement('div');
+            placeholder.className = 'image-card loading-placeholder';
+            const safePrompt = escapeHtml(batch.prompt);
+            const truncatedPrompt = batch.prompt.length > 60 ? batch.prompt.substring(0, 60) + '...' : batch.prompt;
+            placeholder.innerHTML = `
+                <div class="loading-placeholder-content">
+                    <div class="loading-spinner"></div>
+                    <span class="loading-placeholder-text">Generating...</span>
+                </div>
+                <div class="image-card-overlay" style="opacity: 1;">
+                    <p class="image-card-prompt">${escapeHtml(truncatedPrompt)}</p>
+                    <div class="image-card-meta">
+                        <span class="meta-tag">${escapeHtml(batch.modelName)}</span>
+                        <span class="meta-tag loading-tag">
+                            <svg class="spin-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <line x1="12" y1="2" x2="12" y2="6"></line>
+                                <line x1="12" y1="18" x2="12" y2="22"></line>
+                                <line x1="4.93" y1="4.93" x2="7.76" y2="7.76"></line>
+                                <line x1="16.24" y1="16.24" x2="19.07" y2="19.07"></line>
+                                <line x1="2" y1="12" x2="6" y2="12"></line>
+                                <line x1="18" y1="12" x2="22" y2="12"></line>
+                                <line x1="4.93" y1="19.07" x2="7.76" y2="16.24"></line>
+                                <line x1="16.24" y1="7.76" x2="19.07" y2="4.93"></line>
+                            </svg>
+                            Pending
+                        </span>
+                    </div>
+                </div>
+            `;
+            elements.gallery.appendChild(placeholder);
+        }
+    });
+
+    // Render existing images
     state.images.forEach((image, index) => {
         const card = document.createElement('div');
         card.className = 'image-card';
@@ -750,7 +876,23 @@ function renderGallery() {
         const safePrompt = escapeHtml(image.prompt);
 
         card.innerHTML = `
-            <button class="image-card-delete" data-index="${index}" title="Delete image">🗑️</button>
+            <div class="image-card-actions">
+                <button class="image-card-btn image-card-download" data-index="${index}" title="Download image">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                        <polyline points="7 10 12 15 17 10"></polyline>
+                        <line x1="12" y1="15" x2="12" y2="3"></line>
+                    </svg>
+                </button>
+                <button class="image-card-btn image-card-delete" data-index="${index}" title="Delete image">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="3 6 5 6 21 6"></polyline>
+                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                        <line x1="10" y1="11" x2="10" y2="17"></line>
+                        <line x1="14" y1="11" x2="14" y2="17"></line>
+                    </svg>
+                </button>
+            </div>
             <img src="${safeUrl}" alt="${safePrompt}" loading="lazy">
             <div class="image-card-overlay">
                 <p class="image-card-prompt">${safePrompt}</p>
@@ -761,6 +903,13 @@ function renderGallery() {
                 </div>
             </div>
         `;
+
+        // Download button handler
+        const downloadBtn = card.querySelector('.image-card-download');
+        downloadBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            downloadImageByIndex(index);
+        });
 
         // Delete button handler
         const deleteBtn = card.querySelector('.image-card-delete');
@@ -787,6 +936,20 @@ async function deleteImage(index) {
 
     renderGallery();
     showToast('Image deleted', 'success');
+}
+
+function downloadImageByIndex(index) {
+    const image = state.images[index];
+    if (!image) return;
+
+    const link = document.createElement('a');
+    link.href = sanitizeImageUrl(image.url);
+    const timestamp = new Date(image.createdAt).toISOString().replace(/[:.]/g, '-');
+    link.download = `imagen-${timestamp}.png`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    showToast('Image downloaded', 'success');
 }
 
 // ===== Modal =====

@@ -89,6 +89,15 @@ body {
     font-size: 1.75rem;
     font-weight: 700;
     color: var(--text-primary);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.logo-icon {
+    width: 32px;
+    height: 32px;
+    color: var(--accent-primary);
 }
 
 .logo-subtitle {
@@ -182,8 +191,8 @@ body {
     position: absolute;
     top: 2px;
     right: 2px;
-    width: 16px;
-    height: 16px;
+    width: 18px;
+    height: 18px;
     border-radius: 50%;
     background: var(--error);
     color: white;
@@ -192,11 +201,14 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 10px;
-    font-weight: bold;
     opacity: 0;
     transition: opacity var(--transition-fast);
     z-index: 10;
+}
+
+.reference-slot .remove-ref svg {
+    width: 10px;
+    height: 10px;
 }
 
 .reference-slot.filled:hover .remove-ref {
@@ -588,6 +600,71 @@ body {
     font-size: 0.9rem;
 }
 
+/* ===== Loading Placeholder Cards ===== */
+.loading-placeholder {
+    min-height: 300px;
+    background: var(--bg-card);
+    border: 2px dashed var(--accent-primary);
+    display: flex;
+    flex-direction: column;
+    position: relative;
+    animation: pulse-border 2s ease-in-out infinite;
+}
+
+@keyframes pulse-border {
+    0%, 100% {
+        border-color: var(--accent-primary);
+        opacity: 1;
+    }
+    50% {
+        border-color: var(--accent-secondary);
+        opacity: 0.7;
+    }
+}
+
+.loading-placeholder-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    padding: 40px;
+}
+
+.loading-placeholder .loading-spinner {
+    width: 40px;
+    height: 40px;
+    border-width: 4px;
+}
+
+.loading-placeholder-text {
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+    font-weight: 500;
+}
+
+.loading-placeholder .image-card-overlay {
+    position: relative;
+    inset: auto;
+    background: linear-gradient(to top, rgba(0, 0, 0, 0.6) 0%, transparent 100%);
+    padding: 16px;
+}
+
+.loading-tag {
+    background: var(--accent-primary) !important;
+    color: var(--bg-primary) !important;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.loading-tag .spin-icon {
+    width: 12px;
+    height: 12px;
+    animation: spin 1s linear infinite;
+}
+
 /* ===== Gallery ===== */
 .gallery-header {
     display: flex;
@@ -621,9 +698,11 @@ body {
 }
 
 .empty-icon {
-    font-size: 4rem;
+    width: 80px;
+    height: 80px;
     margin-bottom: 16px;
-    opacity: 0.5;
+    opacity: 0.3;
+    color: var(--text-secondary);
 }
 
 .gallery-empty p {
@@ -676,28 +755,43 @@ body {
     opacity: 1;
 }
 
-.image-card-delete {
+.image-card-actions {
     position: absolute;
     top: 10px;
     right: 10px;
+    display: flex;
+    gap: 8px;
+    z-index: 10;
+}
+
+.image-card-btn {
     width: 32px;
     height: 32px;
     border-radius: 50%;
     background: rgba(0, 0, 0, 0.7);
     border: 1px solid rgba(255, 255, 255, 0.2);
     color: white;
-    font-size: 16px;
     cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
     opacity: 0;
     transition: all var(--transition-fast);
-    z-index: 10;
 }
 
-.image-card:hover .image-card-delete {
+.image-card-btn svg {
+    width: 16px;
+    height: 16px;
+}
+
+.image-card:hover .image-card-btn {
     opacity: 1;
+}
+
+.image-card-download:hover {
+    background: var(--accent-primary);
+    border-color: var(--accent-primary);
+    transform: scale(1.1);
 }
 
 .image-card-delete:hover {
@@ -785,13 +879,17 @@ body {
     background: var(--bg-tertiary);
     border: 1px solid var(--border-color);
     color: var(--text-primary);
-    font-size: 1.5rem;
     cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
     transition: all var(--transition-fast);
     z-index: 10;
+}
+
+.modal-close svg {
+    width: 18px;
+    height: 18px;
 }
 
 .modal-close:hover {
@@ -810,6 +908,18 @@ body {
     gap: 12px;
     justify-content: center;
     flex-wrap: wrap;
+}
+
+.modal-actions .btn svg {
+    width: 18px;
+    height: 18px;
+    flex-shrink: 0;
+}
+
+.modal-actions .btn {
+    display: flex;
+    align-items: center;
+    gap: 8px;
 }
 
 .modal-metadata {

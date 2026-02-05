@@ -14,7 +14,15 @@
         <!-- Sidebar -->
         <aside class="sidebar">
             <div class="sidebar-header">
-                <h1 class="logo">🎨 Imagen</h1>
+                <h1 class="logo">
+                    <svg class="logo-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M12 19l7-7 3 3-7 7-3-3z"></path>
+                        <path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"></path>
+                        <path d="M2 2l7.586 7.586"></path>
+                        <circle cx="11" cy="11" r="2"></circle>
+                    </svg>
+                    Imagen
+                </h1>
             </div>
 
             <!-- Reference Images Section -->
@@ -114,11 +122,6 @@
                         </button>
                     </div>
                 </div>
-                <!-- Loading Indicator -->
-                <div class="loading-container" id="loadingContainer" style="display: none;">
-                    <div class="loading-spinner"></div>
-                    <span class="loading-text">Generating images...</span>
-                </div>
             </div>
 
             <!-- Gallery -->
@@ -130,7 +133,11 @@
             </div>
             <div class="gallery" id="gallery">
                 <div class="gallery-empty" id="galleryEmpty">
-                    <span class="empty-icon">🖼️</span>
+                    <svg class="empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                        <circle cx="8.5" cy="8.5" r="1.5"></circle>
+                        <polyline points="21 15 16 10 5 21"></polyline>
+                    </svg>
                     <p>No images generated yet</p>
                     <p class="empty-hint">Write a prompt above and click Generate</p>
                 </div>
@@ -142,17 +149,36 @@
     <div class="modal" id="imageModal">
         <div class="modal-overlay" id="modalOverlay"></div>
         <div class="modal-content">
-            <button class="modal-close" id="modalClose">×</button>
+            <button class="modal-close" id="modalClose">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="18" y1="6" x2="6" y2="18"></line>
+                    <line x1="6" y1="6" x2="18" y2="18"></line>
+                </svg>
+            </button>
             <img src="" alt="Full size image" id="modalImage">
             <div class="modal-actions">
                 <button class="btn btn-secondary" id="useAsReference">
-                    <span>📌</span> Use as Reference
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
+                        <circle cx="12" cy="10" r="3"></circle>
+                    </svg>
+                    Use as Reference
                 </button>
                 <button class="btn btn-secondary" id="recreateImage">
-                    <span>🔄</span> Recreate
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="23 4 23 10 17 10"></polyline>
+                        <polyline points="1 20 1 14 7 14"></polyline>
+                        <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+                    </svg>
+                    Recreate
                 </button>
                 <button class="btn btn-secondary" id="downloadImage">
-                    <span>⬇️</span> Download
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                        <polyline points="7 10 12 15 17 10"></polyline>
+                        <line x1="12" y1="15" x2="12" y2="3"></line>
+                    </svg>
+                    Download
                 </button>
             </div>
             <div class="modal-metadata" id="modalMetadata">
