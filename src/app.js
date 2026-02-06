@@ -626,7 +626,9 @@ async function generateImages() {
         failed: 0
     };
     state.pendingBatches.push(batch);
-    renderGallery(); // Show loading placeholders
+    
+    // Add loading placeholders without full re-render
+    addLoadingPlaceholders(batch, imageCount);
     
     showToast(`Queued ${imageCount} image(s) for generation`, 'success');
 
@@ -649,18 +651,21 @@ async function generateImages() {
                 };
                 state.images.unshift(imageData);
                 batch.completed++;
-                renderGallery();
+                
+                // Remove one placeholder and add the new image
+                removeOnePlaceholder(batchId);
+                prependImageCard(imageData, 0);
                 
                 // Save to IndexedDB in background
                 ImagenDB.saveImage(imageData).catch(e => console.error('Failed to save to IndexedDB:', e));
             } else {
                 batch.failed++;
-                renderGallery();
+                removeOnePlaceholder(batchId);
             }
         } catch (error) {
             console.error('Failed to generate image:', error);
             batch.failed++;
-            renderGallery();
+            removeOnePlaceholder(batchId);
         }
     };
 
@@ -678,7 +683,6 @@ async function generateImages() {
     if (batchIndex !== -1) {
         state.pendingBatches.splice(batchIndex, 1);
     }
-    renderGallery();
 
     if (batch.completed > 0) {
         showToast(`${batch.completed} image(s) generated!`, 'success');
@@ -953,6 +957,176 @@ function renderGallery() {
     });
 }
 
+// ===== Incremental Gallery Updates =====
+function addLoadingPlaceholders(batch, count) {
+    // Hide empty state if showing
+    elements.galleryEmpty.style.display = 'none';
+    
+    for (let i = 0; i < count; i++) {
+        const placeholder = createPlaceholderElement(batch);
+        elements.gallery.insertBefore(placeholder, elements.gallery.firstChild);
+    }
+}
+
+function createPlaceholderElement(batch) {
+    const placeholder = document.createElement('div');
+    placeholder.className = 'image-card loading-placeholder';
+    placeholder.dataset.batchId = batch.id;
+    const truncatedPrompt = batch.prompt.length > 60 ? batch.prompt.substring(0, 60) + '...' : batch.prompt;
+    placeholder.innerHTML = `
+        <div class="loading-placeholder-content">
+            <div class="loading-spinner"></div>
+            <span class="loading-placeholder-text">Generating...</span>
+        </div>
+        <div class="image-card-overlay" style="opacity: 1;">
+            <p class="image-card-prompt">${escapeHtml(truncatedPrompt)}</p>
+            <div class="image-card-meta">
+                <span class="meta-tag">${escapeHtml(batch.modelName)}</span>
+                <span class="meta-tag loading-tag">
+                    <svg class="spin-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <line x1="12" y1="2" x2="12" y2="6"></line>
+                        <line x1="12" y1="18" x2="12" y2="22"></line>
+                        <line x1="4.93" y1="4.93" x2="7.76" y2="7.76"></line>
+                        <line x1="16.24" y1="16.24" x2="19.07" y2="19.07"></line>
+                        <line x1="2" y1="12" x2="6" y2="12"></line>
+                        <line x1="18" y1="12" x2="22" y2="12"></line>
+                        <line x1="4.93" y1="19.07" x2="7.76" y2="16.24"></line>
+                        <line x1="16.24" y1="7.76" x2="19.07" y2="4.93"></line>
+                    </svg>
+                    Pending
+                </span>
+            </div>
+        </div>
+    `;
+    return placeholder;
+}
+
+function removeOnePlaceholder(batchId) {
+    const placeholder = elements.gallery.querySelector(`.loading-placeholder[data-batch-id="${batchId}"]`);
+    if (placeholder) {
+        placeholder.remove();
+    }
+    
+    // Show empty state if gallery is now empty
+    if (elements.gallery.children.length === 0 || 
+        (elements.gallery.children.length === 1 && elements.gallery.contains(elements.galleryEmpty))) {
+        elements.galleryEmpty.style.display = 'flex';
+        if (!elements.gallery.contains(elements.galleryEmpty)) {
+            elements.gallery.appendChild(elements.galleryEmpty);
+        }
+    }
+}
+
+function prependImageCard(image, index) {
+    const card = createImageCardElement(image, index);
+    
+    // Insert after any remaining placeholders
+    const firstNonPlaceholder = elements.gallery.querySelector('.image-card:not(.loading-placeholder)');
+    if (firstNonPlaceholder) {
+        elements.gallery.insertBefore(card, firstNonPlaceholder);
+    } else {
+        elements.gallery.appendChild(card);
+    }
+    
+    // Update indices on existing cards since we prepended
+    updateCardIndices();
+}
+
+function createImageCardElement(image, index) {
+    const card = document.createElement('div');
+    card.className = 'image-card';
+    card.dataset.imageId = image.id;
+
+    const safeUrl = sanitizeImageUrl(image.url);
+    const safePrompt = escapeHtml(image.prompt);
+
+    card.innerHTML = `
+        <div class="image-card-actions image-card-actions-top">
+            <button class="image-card-btn image-card-download" title="Download image">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                    <polyline points="7 10 12 15 17 10"></polyline>
+                    <line x1="12" y1="15" x2="12" y2="3"></line>
+                </svg>
+            </button>
+            <button class="image-card-btn image-card-delete" title="Delete image">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="3 6 5 6 21 6"></polyline>
+                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                    <line x1="10" y1="11" x2="10" y2="17"></line>
+                    <line x1="14" y1="11" x2="14" y2="17"></line>
+                </svg>
+            </button>
+        </div>
+        <div class="image-card-actions image-card-actions-bottom">
+            <button class="image-card-btn image-card-reference" title="Use as reference">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
+                    <circle cx="12" cy="10" r="3"></circle>
+                </svg>
+            </button>
+            <button class="image-card-btn image-card-recreate" title="Recreate with same settings">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="23 4 23 10 17 10"></polyline>
+                    <polyline points="1 20 1 14 7 14"></polyline>
+                    <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+                </svg>
+            </button>
+        </div>
+        <img src="${safeUrl}" alt="${safePrompt}" loading="lazy">
+        <div class="image-card-overlay">
+            <p class="image-card-prompt">${safePrompt}</p>
+            <div class="image-card-meta">
+                <span class="meta-tag">${escapeHtml(image.modelName || image.model)}</span>
+                <span class="meta-tag">${escapeHtml(image.quality || image.size)}</span>
+                <span class="meta-tag">${escapeHtml(image.aspectRatio)}</span>
+            </div>
+        </div>
+    `;
+
+    // Attach event handlers
+    attachImageCardHandlers(card, image);
+    
+    return card;
+}
+
+function attachImageCardHandlers(card, image) {
+    const imageId = image.id;
+    
+    card.querySelector('.image-card-download').addEventListener('click', (e) => {
+        e.stopPropagation();
+        const idx = state.images.findIndex(img => img.id === imageId);
+        if (idx !== -1) downloadImageByIndex(idx);
+    });
+
+    card.querySelector('.image-card-delete').addEventListener('click', (e) => {
+        e.stopPropagation();
+        const idx = state.images.findIndex(img => img.id === imageId);
+        if (idx !== -1) deleteImage(idx);
+    });
+
+    card.querySelector('.image-card-reference').addEventListener('click', (e) => {
+        e.stopPropagation();
+        const idx = state.images.findIndex(img => img.id === imageId);
+        if (idx !== -1) addImageAsReference(idx);
+    });
+
+    card.querySelector('.image-card-recreate').addEventListener('click', (e) => {
+        e.stopPropagation();
+        const idx = state.images.findIndex(img => img.id === imageId);
+        if (idx !== -1) recreateImageByIndex(idx);
+    });
+
+    card.addEventListener('click', () => {
+        const idx = state.images.findIndex(img => img.id === imageId);
+        if (idx !== -1) openModal(state.images[idx]);
+    });
+}
+
+function updateCardIndices() {
+    // No longer needed since we use image IDs instead of indices
+}
+
 async function deleteImage(index) {
     const imageToDelete = state.images[index];
     state.images.splice(index, 1);
@@ -963,7 +1137,20 @@ async function deleteImage(index) {
         console.warn('Could not delete from IndexedDB:', e);
     }
 
-    renderGallery();
+    // Remove card from DOM without full re-render
+    const card = elements.gallery.querySelector(`.image-card[data-image-id="${imageToDelete.id}"]`);
+    if (card) {
+        card.remove();
+    }
+    
+    // Show empty state if gallery is now empty
+    if (state.images.length === 0 && state.pendingBatches.length === 0) {
+        elements.galleryEmpty.style.display = 'flex';
+        if (!elements.gallery.contains(elements.galleryEmpty)) {
+            elements.gallery.appendChild(elements.galleryEmpty);
+        }
+    }
+    
     showToast('Image deleted', 'success');
 }
 
