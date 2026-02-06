@@ -972,7 +972,7 @@ function downloadImageByIndex(index) {
     if (!image) return;
 
     const link = document.createElement('a');
-    link.href = sanitizeImageUrl(image.url);
+    link.href = image.url;
     const timestamp = new Date(image.createdAt).toISOString().replace(/[:.]/g, '-');
     link.download = `imagen-${timestamp}.png`;
     document.body.appendChild(link);

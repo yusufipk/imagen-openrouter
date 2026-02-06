@@ -948,10 +948,20 @@ body {
     padding: 16px;
     font-size: 0.85rem;
     color: var(--text-secondary);
+    max-height: 200px;
+    overflow-y: auto;
 }
 
 .modal-metadata p {
     margin-bottom: 8px;
+}
+
+.modal-metadata p:first-child {
+    display: -webkit-box;
+    -webkit-line-clamp: 4;
+    line-clamp: 4;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
 }
 
 .modal-metadata p:last-child {
