@@ -974,7 +974,8 @@ function downloadImageByIndex(index) {
     const link = document.createElement('a');
     link.href = image.url;
     const timestamp = new Date(image.createdAt).toISOString().replace(/[:.]/g, '-');
-    link.download = `imagen-${timestamp}.png`;
+    const ext = getImageExtension(image.url);
+    link.download = `imagen-${timestamp}.${ext}`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -1125,7 +1126,8 @@ function downloadCurrentImage() {
 
     const link = document.createElement('a');
     link.href = state.currentImage.url;
-    link.download = `imagen_${state.currentImage.id}.png`;
+    const ext = getImageExtension(state.currentImage.url);
+    link.download = `imagen_${state.currentImage.id}.${ext}`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -1162,6 +1164,37 @@ function escapeHtml(text) {
     const div = document.createElement('div');
     div.textContent = String(text);
     return div.innerHTML;
+}
+
+function getImageExtension(url) {
+    if (!url) return 'png';
+    
+    // Check for data URL with mime type
+    if (url.startsWith('data:image/')) {
+        const mimeMatch = url.match(/^data:image\/(\w+)/);
+        if (mimeMatch) {
+            const mime = mimeMatch[1].toLowerCase();
+            // Map common mime types to extensions
+            if (mime === 'jpeg') return 'jpg';
+            if (mime === 'png') return 'png';
+            if (mime === 'gif') return 'gif';
+            if (mime === 'webp') return 'webp';
+            if (mime === 'svg+xml') return 'svg';
+            return mime;
+        }
+    }
+    
+    // Check URL extension
+    if (url.startsWith('http')) {
+        const urlPath = url.split('?')[0];
+        const ext = urlPath.split('.').pop()?.toLowerCase();
+        if (['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg'].includes(ext)) {
+            return ext === 'jpeg' ? 'jpg' : ext;
+        }
+    }
+    
+    // Default to png
+    return 'png';
 }
 
 function sanitizeImageUrl(url) {
