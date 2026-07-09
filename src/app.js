@@ -130,6 +130,27 @@ const MODEL_CONFIGS = {
         supportsImageInput: true,
         maxReferences: 14
     },
+    'google/gemini-3.1-flash-image': {
+        name: 'Gemini 3.1 Flash Image',
+        supportsImageSize: true,
+        supportsAspectRatio: true,
+        supportsImageInput: true,
+        maxReferences: 3
+    },
+    'google/gemini-3-pro-image': {
+        name: 'Gemini 3 Pro Image',
+        supportsImageSize: true,
+        supportsAspectRatio: true,
+        supportsImageInput: true,
+        maxReferences: 14
+    },
+    'google/gemini-3.1-flash-lite-image': {
+        name: 'Gemini 3.1 Flash Lite Image',
+        supportsImageSize: true,
+        supportsAspectRatio: true,
+        supportsImageInput: true,
+        maxReferences: 3
+    },
     'openai/gpt-5-image': {
         name: 'GPT-5 Image',
         supportsImageSize: false,
@@ -139,6 +160,13 @@ const MODEL_CONFIGS = {
     },
     'openai/gpt-5-image-mini': {
         name: 'GPT-5 Image Mini',
+        supportsImageSize: false,
+        supportsAspectRatio: true,
+        supportsImageInput: true,
+        maxReferences: 1
+    },
+    'openai/gpt-5.4-image-2': {
+        name: 'GPT-5.4 Image 2',
         supportsImageSize: false,
         supportsAspectRatio: true,
         supportsImageInput: true,
@@ -174,6 +202,20 @@ const MODEL_CONFIGS = {
     },
     'bytedance-seed/seedream-4.5': {
         name: 'Seedream 4.5',
+        supportsImageSize: false,
+        supportsAspectRatio: true,
+        supportsImageInput: false,
+        maxReferences: 0
+    },
+    'bytedance-seed/seed-2.0-mini': {
+        name: 'Seed 2.0 Mini',
+        supportsImageSize: false,
+        supportsAspectRatio: true,
+        supportsImageInput: false,
+        maxReferences: 0
+    },
+    'bytedance-seed/seed-2.0-lite': {
+        name: 'Seed 2.0 Lite',
         supportsImageSize: false,
         supportsAspectRatio: true,
         supportsImageInput: false,
