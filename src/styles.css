@@ -275,6 +275,9 @@ body {
     top: calc(100% + 4px);
     left: 0;
     right: 0;
+    /* The sidebar is narrow; let the picker spill over it so model names,
+       tier and price fit on one line each. */
+    min-width: 290px;
     background: var(--bg-secondary);
     border: 1px solid var(--border-color);
     border-radius: var(--border-radius-sm);
@@ -287,13 +290,17 @@ body {
 }
 
 .custom-select.open .custom-select-options {
-    max-height: 300px;
+    max-height: 380px;
     opacity: 1;
-    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
 }
 
 .custom-select-option {
-    padding: 12px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    padding: 9px 14px;
     color: var(--text-secondary);
     cursor: pointer;
     transition: all var(--transition-fast);
@@ -308,6 +315,158 @@ body {
 .custom-select-option.selected {
     background: var(--accent-primary);
     color: #000000;
+}
+
+
+
+/* ===== Model picker rows ===== */
+.model-option-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    width: 100%;
+    min-width: 0;
+}
+
+.model-option-row .model-option-name {
+    flex: 1;
+    min-width: 0;
+}
+
+.model-option-sub .model-option-id {
+    flex: 1;
+    min-width: 0;
+}
+
+.model-option-sub .model-option-price {
+    margin-left: auto;
+}
+
+.model-date {
+    font-size: 0.62rem;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    padding: 1px 5px;
+    border-radius: 4px;
+    flex-shrink: 0;
+    white-space: nowrap;
+}
+
+.custom-select-option.selected .model-date {
+    color: rgba(0, 0, 0, 0.7);
+    background: rgba(0, 0, 0, 0.08);
+    border-color: rgba(0, 0, 0, 0.2);
+}
+
+
+
+
+
+
+
+/* ===== Model Picker (search + pricing) ===== */
+.model-search-wrap {
+    padding: 10px;
+    border-bottom: 1px solid var(--border-color);
+    flex-shrink: 0;
+}
+
+.model-search {
+    width: 100%;
+    padding: 8px 12px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius-sm);
+    color: var(--text-primary);
+    font-family: inherit;
+    font-size: 0.85rem;
+    outline: none;
+    transition: border-color var(--transition-fast);
+}
+
+.model-search:focus {
+    border-color: var(--accent-secondary);
+}
+
+.model-search::placeholder {
+    color: var(--text-muted);
+}
+
+#modelOptionsList {
+    overflow-y: auto;
+    flex: 1;
+    min-height: 0;
+}
+
+.model-option-name {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.model-option-id {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.custom-select-option.selected .model-option-id,
+.custom-select-option.selected .model-option-price {
+    color: rgba(0, 0, 0, 0.6);
+}
+
+.model-option-price {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.model-empty {
+    padding: 16px;
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    text-align: center;
+}
+
+.model-list-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 8px 12px;
+    border-top: 1px solid var(--border-color);
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    flex-shrink: 0;
+}
+
+.model-refresh {
+    background: none;
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius-sm);
+    color: var(--text-secondary);
+    padding: 4px 10px;
+    font-family: inherit;
+    font-size: 0.7rem;
+    cursor: pointer;
+    transition: all var(--transition-fast);
+}
+
+.model-refresh:hover:not(:disabled) {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+}
+
+.model-refresh:disabled {
+    opacity: 0.5;
+    cursor: default;
 }
 
 /* ===== Button Toggle Group ===== */
