@@ -39,33 +39,23 @@
             <div class="config-section">
                 <h3>Model</h3>
                 <div class="custom-select" id="modelSelectContainer">
-                    <div class="custom-select-trigger" id="modelSelectTrigger">
-                        <span id="modelSelectValue">Gemini 2.5 Flash Image</span>
+                    <div class="custom-select-trigger" id="modelSelectTrigger" role="button" tabindex="0"
+                        aria-haspopup="listbox" aria-expanded="false">
+                        <span id="modelSelectValue">Loading models…</span>
                         <span class="custom-select-arrow">▾</span>
                     </div>
-                    <div class="custom-select-options" id="modelSelectOptions">
-                        <div class="custom-select-option selected" data-value="google/gemini-2.5-flash-image">Gemini 2.5
-                            Flash Image</div>
-                        <div class="custom-select-option" data-value="google/gemini-2.5-flash-image-preview">Gemini 2.5
-                            Flash (Preview)</div>
-                        <div class="custom-select-option" data-value="google/gemini-3.1-flash-image-preview">Gemini 3.1
-                            Flash (Preview)</div>
-                        <div class="custom-select-option" data-value="google/gemini-3-pro-image-preview">Gemini 3 Pro
-                            (Preview)</div>
-                        <div class="custom-select-option" data-value="openai/gpt-5-image">GPT-5 Image</div>
-                        <div class="custom-select-option" data-value="openai/gpt-5-image-mini">GPT-5 Image Mini</div>
-                        <div class="custom-select-option" data-value="black-forest-labs/flux.2-pro">Flux 2 Pro</div>
-                        <div class="custom-select-option" data-value="black-forest-labs/flux.2-max">Flux 2 Max</div>
-                        <div class="custom-select-option" data-value="black-forest-labs/flux.2-flex">Flux 2 Flex</div>
-                        <div class="custom-select-option" data-value="black-forest-labs/flux.2-klein-4b">Flux 2 Klein 4B
+                    <div class="custom-select-options" id="modelSelectOptions" role="listbox">
+                        <div class="model-search-wrap">
+                            <input type="text" id="modelSearch" class="model-search" placeholder="Search models…"
+                                autocomplete="off" aria-label="Search models">
                         </div>
-                        <div class="custom-select-option" data-value="bytedance-seed/seedream-4.5">Seedream 4.5</div>
-                        <div class="custom-select-option" data-value="sourceful/riverflow-v2-fast-preview">Riverflow V2
-                            Fast</div>
-                        <div class="custom-select-option" data-value="sourceful/riverflow-v2-standard-preview">Riverflow
-                            V2 Standard</div>
-                        <div class="custom-select-option" data-value="sourceful/riverflow-v2-max-preview">Riverflow V2
-                            Max</div>
+                        <div id="modelOptionsList">
+                            <!-- Populated at runtime from the OpenRouter model catalogue -->
+                        </div>
+                        <div class="model-list-footer">
+                            <span id="modelSourceNote"></span>
+                            <button type="button" id="refreshModels" class="model-refresh">Refresh</button>
+                        </div>
                     </div>
                 </div>
             </div>
