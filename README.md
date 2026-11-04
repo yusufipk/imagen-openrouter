@@ -2,8 +2,7 @@
 
 A browser-only image generator for OpenRouter. Pick any OpenRouter image model, send one prompt to up to three models at once, and keep every result in a local gallery. Your API key and images never leave the browser except for calls to OpenRouter.
 
-![Gallery](assets/UI.webp)
-![Model picker with a comparison model added](assets/UI-1.webp)
+![Imagen](assets/UI.webp)
 
 ## Features
 
