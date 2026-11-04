@@ -7,38 +7,10 @@ A powerful client-side AI image generation tool using OpenRouter API. Generate t
 
 ## ✨ Features
 
-### 🎨 Multi-Model Support (auto-updating)
-The model list is fetched from OpenRouter at startup, so **new image models
-appear on their own** — no code change, no release needed. That currently
-surfaces **43 image models** (Gemini, GPT Image, FLUX, Seedream, Qwen Image,
-Recraft, Krea, Riverflow, Grok Imagine, MAI).
-
-- Every image model with a live provider is listed automatically
-- **Searchable picker** showing the model id, a **Good / Better / Best** tier
-  and an estimated **price per image**
-- Cached for 24 hours; a **Refresh** button forces an update
-- A bundled fallback list keeps the app usable if OpenRouter is unreachable
-- A saved model that has since been retired is detected and swapped out
-
-### 🔀 Compare Models Side by Side
-Send one prompt to up to **three models at once** and compare the results in
-the gallery.
-
-- Hit **+** next to any model in the picker to add it to the comparison
-- Each model generates your full image count, in parallel
-- Every image is tagged with the model that produced it
-- Leave the comparison empty for normal single-model generation
-
-### 💰 Session Cost
-A running total of what you've spent, taken from the cost OpenRouter reports
-for each generation — not an estimate.
-
-- Exact per-call cost via OpenRouter's usage accounting
-- Falls back to the catalogue price estimate if a provider omits it, and marks
-  the total with `≈` so you know it's approximate
-- Shows what the next run will cost at your current settings, before you press
-  Generate
-- **Reset** to start a new session
+### 🎨 Multi-Model Support
+- **Every OpenRouter image model**, fetched at startup and cached for a day, with a searchable picker and a price estimate per image
+- **Compare models**: send one prompt to up to three models at once and see the results side by side
+- **Session cost**: a running total of what OpenRouter billed, plus the cost of the next run
 
 ### 📐 Flexible Output Options
 - **Resolution**: 1K, 2K, 4K (Gemini models)
@@ -106,7 +78,7 @@ This is a **100% client-side application**:
 ## 🛠️ Tech Stack
 
 - **Frontend**: Pure HTML/CSS/JavaScript (no dependencies)
-- **API**: OpenRouter for model access + `/api/v1/models` for model discovery
+- **API**: OpenRouter for model access
 - **Storage**: IndexedDB for image persistence
 - **Styling**: Custom CSS with CSS variables
 

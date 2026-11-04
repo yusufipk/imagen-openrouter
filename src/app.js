@@ -87,6 +87,28 @@ const ImagenDB = {
 };
 
 // ===== State Management =====
+// Stored values are parsed defensively: a truncated or hand-edited entry must
+// not stop the whole script from running.
+function readStoredComparisonModels() {
+    try {
+        const parsed = JSON.parse(localStorage.getItem('imagen_comparison_models') || '[]');
+        return Array.isArray(parsed) ? parsed.filter(id => typeof id === 'string') : [];
+    } catch (error) {
+        return [];
+    }
+}
+
+function readStoredSessionCost() {
+    const fresh = { total: 0, images: 0, estimated: false, startedAt: new Date().toISOString() };
+    try {
+        const parsed = JSON.parse(localStorage.getItem('imagen_session_cost') || 'null');
+        if (!parsed || !Number.isFinite(parsed.total) || !Number.isFinite(parsed.images)) return fresh;
+        return { ...fresh, ...parsed, estimated: Boolean(parsed.estimated) };
+    } catch (error) {
+        return fresh;
+    }
+}
+
 const state = {
     apiKey: localStorage.getItem('imagen_api_key') || '',
     selectedModel: localStorage.getItem('imagen_model') || 'google/gemini-2.5-flash-image',
@@ -100,12 +122,12 @@ const state = {
     pendingBatches: [], // Track pending generation batches { id, prompt, count, completed, failed }
     // Extra models to send the same prompt to alongside selectedModel.
     // Empty = single-model behaviour, unchanged from before.
-    comparisonModels: JSON.parse(localStorage.getItem('imagen_comparison_models') || '[]'),
+    comparisonModels: readStoredComparisonModels(),
+    catalogueIsLive: true, // false while running on a stale or bundled list
     availableModels: [], // Image models discovered from OpenRouter (see loadModels)
     // Running spend since the last reset. `estimated` is set when a provider
     // did not report a cost and the figure includes a price estimate.
-    sessionCost: JSON.parse(localStorage.getItem('imagen_session_cost') || 'null') ||
-        { total: 0, images: 0, estimated: false, startedAt: new Date().toISOString() }
+    sessionCost: readStoredSessionCost()
 };
 
 // ===== Model Configurations =====
@@ -137,6 +159,10 @@ const state = {
 const OPENROUTER_MODELS_URL = 'https://openrouter.ai/api/v1/models?output_modalities=image';
 const MODEL_CACHE_KEY = 'imagen_models_cache';
 const MODEL_CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
+const MODEL_FETCH_TIMEOUT_MS = 8000;
+// Upper bound on simultaneous generation requests, so a multi-model run does
+// not fire up to 24 paid calls at once and trip provider rate limits.
+const MAX_CONCURRENT_GENERATIONS = 4;
 
 /**
  * OpenRouter bills image output per token, so a per-image figure needs a
@@ -157,7 +183,7 @@ const TOKENS_PER_MULTIMODAL_IMAGE = 1290;
 
 /**
  * Capabilities that /api/v1/models does not expose. Everything here is
- * optional — a model missing from this table still works, it just uses the
+ * optional: a model missing from this table still works, it just uses the
  * conservative defaults in deriveModelConfig().
  *
  * Keys may be an exact model id or a prefix ending in "*".
@@ -175,7 +201,7 @@ const MODEL_CAPABILITY_OVERRIDES = {
 
 /**
  * Snapshot of the catalogue, used only when the live request fails (offline,
- * blocked, or OpenRouter down). Generated from /api/v1/models — refreshing it
+ * blocked, or OpenRouter down). Generated from /api/v1/models; refreshing it
  * is optional housekeeping, not a requirement for new models to appear.
  */
 const FALLBACK_MODELS = [
@@ -246,7 +272,7 @@ function getModelOverrides(modelId) {
 
 /**
  * Release month shown against each model, from the catalogue's `created`
- * timestamp — the same date OpenRouter shows on its own model pages.
+ * timestamp, the same date OpenRouter shows on its own model pages.
  */
 function formatReleaseDate(created) {
     if (!Number.isFinite(created) || created <= 0) return '';
@@ -302,14 +328,20 @@ function extractImageModels(apiPayload) {
         .sort((a, b) => (b.created || 0) - (a.created || 0));
 }
 
-function readModelCache() {
+/**
+ * @param {boolean} allowStale Return an expired cache too (used when the live
+ *   request fails, so an offline start keeps the user's last real catalogue).
+ */
+function readModelCache(allowStale = false) {
     try {
         const raw = localStorage.getItem(MODEL_CACHE_KEY);
         if (!raw) return null;
         const cached = JSON.parse(raw);
         if (!cached || !Array.isArray(cached.models) || !cached.models.length) return null;
-        if (Date.now() - cached.fetchedAt > MODEL_CACHE_TTL_MS) return null;
-        return cached.models;
+        if (!allowStale && Date.now() - cached.fetchedAt > MODEL_CACHE_TTL_MS) return null;
+        // Drop malformed entries so one bad record cannot break startup.
+        const models = cached.models.filter(m => m && typeof m.id === 'string' && m.id);
+        return models.length ? models : null;
     } catch (error) {
         return null;
     }
@@ -319,7 +351,7 @@ function writeModelCache(models) {
     try {
         localStorage.setItem(MODEL_CACHE_KEY, JSON.stringify({ fetchedAt: Date.now(), models }));
     } catch (error) {
-        // A full or unavailable localStorage is not fatal — we just refetch.
+        // A full or unavailable localStorage is not fatal, we just refetch.
         console.warn('Could not cache model list:', error);
     }
 }
@@ -336,9 +368,14 @@ async function loadModels(forceRefresh = false) {
     let source = 'cache';
 
     if (!models) {
+        // Startup waits on this request, so a stalled connection must not
+        // hang the app: give up after a few seconds and use the fallbacks.
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), MODEL_FETCH_TIMEOUT_MS);
         try {
             const response = await fetch(OPENROUTER_MODELS_URL, {
-                headers: { 'Accept': 'application/json' }
+                headers: { 'Accept': 'application/json' },
+                signal: controller.signal
             });
             if (!response.ok) throw new Error(`HTTP ${response.status}`);
             const payload = await response.json();
@@ -348,9 +385,14 @@ async function loadModels(forceRefresh = false) {
             source = 'api';
             writeModelCache(models);
         } catch (error) {
-            console.warn('Could not load models from OpenRouter, using bundled list:', error);
-            models = FALLBACK_MODELS;
-            source = 'fallback';
+            // Prefer the last live catalogue, even if expired, over the
+            // bundled list: it still holds the models the user picked.
+            const stale = readModelCache(true);
+            console.warn('Could not load models from OpenRouter, using', stale ? 'stale cache' : 'bundled list', error);
+            models = stale || FALLBACK_MODELS;
+            source = stale ? 'stale' : 'fallback';
+        } finally {
+            clearTimeout(timeout);
         }
     }
 
@@ -436,7 +478,7 @@ function recordGenerationCost(meta, modelConfig) {
     if (reported !== null) {
         state.sessionCost.total += reported;
     } else {
-        // No cost in the response — fall back to the catalogue estimate.
+        // No cost in the response, so fall back to the catalogue estimate.
         const estimate = modelConfig && Number.isFinite(modelConfig.pricePerImage)
             ? modelConfig.pricePerImage
             : 0;
@@ -493,14 +535,20 @@ function formatPricePerImage(pricePerImage) {
 
 /** Primary model first, then any comparison models, de-duplicated. */
 function getActiveModelIds() {
+    // Filtered against the catalogue here because on the bundled offline list
+    // the saved set is kept whole rather than pruned (see pruneComparisonModels).
     return [state.selectedModel, ...state.comparisonModels]
-        .filter((id, i, arr) => id && arr.indexOf(id) === i);
+        .filter((id, i, arr) => id && MODEL_CONFIGS[id] && arr.indexOf(id) === i);
 }
 
 const MAX_COMPARISON_MODELS = 2; // primary + 2 = 3 models at once
 
 function persistComparisonModels() {
-    localStorage.setItem('imagen_comparison_models', JSON.stringify(state.comparisonModels));
+    try {
+        localStorage.setItem('imagen_comparison_models', JSON.stringify(state.comparisonModels));
+    } catch (error) {
+        console.warn('Could not persist comparison models:', error);
+    }
 }
 
 /** Add/remove a model from the comparison set. */
@@ -520,13 +568,28 @@ function toggleComparisonModel(modelId) {
     persistComparisonModels();
     renderModelOptions(elements.modelSearch ? elements.modelSearch.value : '');
     updateModelSummary();
+    updateGeminiOptionsVisibility();
 }
 
-/** Drop comparison models that are no longer in the catalogue. */
-function pruneComparisonModels() {
+function clearComparisonModels() {
+    if (!state.comparisonModels.length) return;
+    state.comparisonModels = [];
+    persistComparisonModels();
+    renderModelOptions(elements.modelSearch ? elements.modelSearch.value : '');
+    updateModelSummary();
+    updateGeminiOptionsVisibility();
+}
+
+/**
+ * Drop comparison models that are no longer in the catalogue.
+ * @param {boolean} authoritative The catalogue is live (or a fresh cache). On
+ *   an offline list a missing model is probably not retired, so only the
+ *   primary model is removed and the rest of the saved set is kept.
+ */
+function pruneComparisonModels(authoritative = true) {
     const before = state.comparisonModels.length;
     state.comparisonModels = state.comparisonModels
-        .filter(id => MODEL_CONFIGS[id] && id !== state.selectedModel);
+        .filter(id => id !== state.selectedModel && (!authoritative || MODEL_CONFIGS[id]));
     if (state.comparisonModels.length !== before) persistComparisonModels();
 }
 
@@ -534,7 +597,7 @@ function pruneComparisonModels() {
 function updateModelSummary() {
     const primary = MODEL_CONFIGS[state.selectedModel];
     if (!primary) return;
-    const extra = state.comparisonModels.length;
+    const extra = getActiveModelIds().length - 1;
     elements.modelSelectValue.textContent = extra
         ? `${primary.name} + ${extra} more`
         : primary.name;
@@ -601,8 +664,9 @@ function selectModel(modelId, options = {}) {
     if (!config) return false;
 
     state.selectedModel = modelId;
-    localStorage.setItem('imagen_model', modelId);
-    pruneComparisonModels();
+    const persist = options.persist !== false;
+    if (persist) localStorage.setItem('imagen_model', modelId);
+    pruneComparisonModels(state.catalogueIsLive);
     updateModelSummary();
 
     if (options.rerender !== false) {
@@ -616,7 +680,7 @@ function selectModel(modelId, options = {}) {
  * Make sure state.selectedModel points at a model that actually exists.
  * Protects users whose saved model has since been retired by OpenRouter.
  */
-function ensureValidModelSelection() {
+function ensureValidModelSelection(persist = true) {
     if (MODEL_CONFIGS[state.selectedModel]) return;
 
     const previous = state.selectedModel;
@@ -624,9 +688,10 @@ function ensureValidModelSelection() {
         state.availableModels[0];
     if (!preferred) return;
 
-    selectModel(preferred.id, { rerender: false });
+    selectModel(preferred.id, { rerender: false, persist });
     if (previous) {
-        showToast(`"${previous}" is no longer available — switched to ${MODEL_CONFIGS[preferred.id].name}`, 'info');
+        const reason = persist ? 'is no longer available' : 'is not in the offline model list';
+        showToast(`"${previous}" ${reason}, using ${MODEL_CONFIGS[preferred.id].name} for now`, 'info');
     }
 }
 
@@ -637,10 +702,19 @@ async function initModelPicker(forceRefresh = false) {
     }
 
     const { models, source } = await loadModels(forceRefresh);
-    ensureValidModelSelection();
-    renderModelOptions();
+    // Offline (stale cache or bundled list) a missing model is probably not
+    // retired, so the saved selection is left alone in storage.
+    const live = source === 'api' || source === 'cache';
+    state.catalogueIsLive = live;
+    if (live) {
+        // Undo any temporary offline substitution from an earlier load.
+        const saved = localStorage.getItem('imagen_model');
+        if (saved && MODEL_CONFIGS[saved]) state.selectedModel = saved;
+    }
+    ensureValidModelSelection(live);
+    renderModelOptions(elements.modelSearch ? elements.modelSearch.value : '');
 
-    pruneComparisonModels();
+    pruneComparisonModels(live);
     if (MODEL_CONFIGS[state.selectedModel]) {
         updateModelSummary();
     }
@@ -649,11 +723,13 @@ async function initModelPicker(forceRefresh = false) {
         const label = {
             api: 'Live from OpenRouter',
             cache: 'Cached (updates daily)',
-            fallback: 'Offline — bundled list'
+            stale: 'Offline, last saved list',
+            fallback: 'Offline, bundled list'
         }[source] || '';
         elements.modelSourceNote.textContent = `${models.length} models · ${label}`;
     }
     updateGeminiOptionsVisibility();
+    return source;
 }
 
 // ===== Initialization =====
@@ -758,8 +834,12 @@ function setupEventListeners() {
         e.stopPropagation();
         elements.refreshModels.disabled = true;
         try {
-            await initModelPicker(true);
-            showToast('Model list refreshed', 'success');
+            const source = await initModelPicker(true);
+            if (source === 'api') {
+                showToast('Model list refreshed', 'success');
+            } else {
+                showToast('Could not reach OpenRouter, kept the offline list', 'warning');
+            }
         } finally {
             elements.refreshModels.disabled = false;
         }
@@ -1070,7 +1150,7 @@ async function generateImages() {
     // none selected this is a single-entry list and behaves exactly as before.
     const targetModels = getActiveModelIds().filter(id => MODEL_CONFIGS[id]);
     if (!targetModels.length) {
-        showToast('Selected model is unavailable — pick another from the list', 'error');
+        showToast('Selected model is unavailable, pick another from the list', 'error');
         return;
     }
 
@@ -1088,6 +1168,9 @@ async function generateImages() {
             prompt: prompt,
             model: modelId,
             modelName: MODEL_CONFIGS[modelId].name,
+            // Captured now: a catalogue refresh may rebuild MODEL_CONFIGS
+            // while this batch is still queued.
+            config: MODEL_CONFIGS[modelId],
             count: imageCount,
             completed: 0,
             failed: 0
@@ -1105,11 +1188,17 @@ async function generateImages() {
         'success'
     );
 
+    const settings = {
+        references: currentReferences,
+        quality: currentQuality,
+        aspectRatio: currentAspectRatio
+    };
+
     const generateAndDisplay = async (batch, index) => {
-        const modelConfig = MODEL_CONFIGS[batch.model];
+        const modelConfig = batch.config;
         const meta = {};
         try {
-            const result = await generateSingleImage(prompt, batch.model, modelConfig, meta);
+            const result = await generateSingleImage(prompt, batch.model, modelConfig, settings, meta);
             if (result) {
                 recordGenerationCost(meta, modelConfig);
                 const imageData = {
@@ -1137,20 +1226,28 @@ async function generateImages() {
             }
         } catch (error) {
             console.error(`Failed to generate image with ${batch.model}:`, error);
+            // A 200 response without a usable image is still billed.
+            if (Number.isFinite(meta.cost)) recordGenerationCost(meta, modelConfig);
             batch.failed++;
             removeOnePlaceholder(batch.id);
         }
     };
 
-    // Every model x every image runs concurrently.
-    const promises = [];
-    batches.forEach(batch => {
-        for (let i = 0; i < imageCount; i++) {
-            promises.push(generateAndDisplay(batch, i));
+    // Every model x every image, run through a small worker pool. Jobs are
+    // interleaved across models so each model gets its first result early.
+    const jobs = [];
+    for (let i = 0; i < imageCount; i++) {
+        batches.forEach(batch => jobs.push([batch, i]));
+    }
+    let nextJob = 0;
+    const worker = async () => {
+        while (nextJob < jobs.length) {
+            const [batch, i] = jobs[nextJob++];
+            await generateAndDisplay(batch, i);
         }
-    });
-
-    await Promise.allSettled(promises);
+    };
+    const workerCount = Math.min(MAX_CONCURRENT_GENERATIONS, jobs.length);
+    await Promise.allSettled(Array.from({ length: workerCount }, worker));
 
     batches.forEach(batch => {
         const batchIndex = state.pendingBatches.findIndex(b => b.id === batch.id);
@@ -1166,7 +1263,7 @@ async function generateImages() {
             .map(b => b.modelName);
         showToast(
             failedModels.length
-                ? `${completed} image(s) generated — no output from ${failedModels.join(', ')}`
+                ? `${completed} image(s) generated, no output from ${failedModels.join(', ')}`
                 : `${completed} image(s) generated!`,
             failedModels.length ? 'warning' : 'success'
         );
@@ -1175,13 +1272,18 @@ async function generateImages() {
     }
 }
 
-async function generateSingleImage(prompt, modelId, modelConfig, meta = {}) {
+/**
+ * @param {object} settings Snapshot of references, quality and aspect ratio
+ *   taken when Generate was pressed. Jobs wait in a pool, so reading live
+ *   state here would send settings the user changed after pressing Generate.
+ */
+async function generateSingleImage(prompt, modelId, modelConfig, settings, meta = {}) {
     // Build message content
     const content = [];
 
     // Add reference images if supported
     if (modelConfig.supportsImageInput) {
-        state.references.forEach((ref, index) => {
+        settings.references.forEach((ref, index) => {
             if (ref) {
                 content.push({
                     type: 'image_url',
@@ -1217,14 +1319,14 @@ async function generateSingleImage(prompt, modelId, modelConfig, meta = {}) {
     // Add Gemini-specific options
     if (modelConfig.supportsImageSize && modelId.includes('gemini')) {
         requestBody.image_config = {
-            image_size: state.imageQuality.toLowerCase(),
-            aspect_ratio: state.aspectRatio
+            image_size: settings.quality.toLowerCase(),
+            aspect_ratio: settings.aspectRatio
         };
     }
 
     // Add aspect ratio for other models
     if (modelConfig.supportsAspectRatio && !modelId.includes('gemini')) {
-        requestBody.aspect_ratio = state.aspectRatio;
+        requestBody.aspect_ratio = settings.aspectRatio;
     }
 
     const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
@@ -1681,8 +1783,12 @@ function recreateImageByIndex(index) {
 
     // Restore model. If it has since been retired from OpenRouter the current
     // selection is kept rather than silently switching to an unrelated model.
-    if (!selectModel(image.model)) {
-        showToast(`Model "${image.model}" is no longer available — keeping current selection`, 'info');
+    // Recreate targets the one model that made the image, so any comparison
+    // set is cleared; otherwise it would silently multiply the paid requests.
+    if (selectModel(image.model)) {
+        clearComparisonModels();
+    } else {
+        showToast(`Model "${image.model}" is no longer available, keeping current selection`, 'info');
     }
 
     // Restore quality/size
@@ -1753,8 +1859,12 @@ function recreateImage() {
 
     // Restore model. If it has since been retired from OpenRouter the current
     // selection is kept rather than silently switching to an unrelated model.
-    if (!selectModel(state.currentImage.model)) {
-        showToast(`Model "${state.currentImage.model}" is no longer available — keeping current selection`, 'info');
+    // Recreate targets the one model that made the image, so any comparison
+    // set is cleared; otherwise it would silently multiply the paid requests.
+    if (selectModel(state.currentImage.model)) {
+        clearComparisonModels();
+    } else {
+        showToast(`Model "${state.currentImage.model}" is no longer available, keeping current selection`, 'info');
     }
 
     // Restore quality/size
@@ -1806,7 +1916,9 @@ function downloadCurrentImage() {
 
 // ===== UI Helpers =====
 function updateGeminiOptionsVisibility() {
-    const isGemini = state.selectedModel.includes('gemini');
+    // Shown when any model in the run is Gemini, since the resolution setting
+    // is sent to every Gemini model, compared ones included.
+    const isGemini = getActiveModelIds().some(id => id.includes('gemini'));
     elements.geminiOptions.style.display = isGemini ? 'flex' : 'none';
 }
 
@@ -1833,7 +1945,9 @@ function escapeHtml(text) {
     if (text == null) return '';
     const div = document.createElement('div');
     div.textContent = String(text);
-    return div.innerHTML;
+    // innerHTML does not escape quotes, and this output is also used inside
+    // quoted attributes (data-value, data-compare).
+    return div.innerHTML.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
 function getImageExtension(url) {
